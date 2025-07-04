@@ -18,8 +18,11 @@
     "crypto": "^1.0.1",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
+    "got": "^14.4.7",
     "mongoose": "^8.16.0",
-    "oauth-1.0a": "^2.2.6"
+    "needle": "^3.3.1",
+    "oauth-1.0a": "^2.2.6",
+    "twitter-api-v2": "^1.24.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
