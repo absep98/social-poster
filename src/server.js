@@ -12,8 +12,8 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// Basic test route
-app.use('/api/twitter', postRoutes);
+// Routes
+app.use('/api/post', postRoutes);
 
 
 const PORT = process.env.PORT || 5000;

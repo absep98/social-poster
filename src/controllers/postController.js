@@ -1,4 +1,6 @@
 const { postToTwitter } = require('../services/TwitterService');
+const { postToLinkedIn } = require('../services/LinkedInService');
+const { post } = require('needle');
 
 const postToTwitterController = async (req, res) => {
   const { content } = req.body;
@@ -24,4 +26,15 @@ const postToTwitterController = async (req, res) => {
   }
 };
 
-module.exports = { postToTwitterController };
+const postToLinkedInController = async (req, res) => {
+  const { content } = req.body;
+
+  try {
+    const result = await postToLinkedIn(content);
+    res.json({ success: true, platform: 'linkedin', result });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to post to LinkedIn' });
+  }
+};
+
+module.exports = { postToTwitterController, postToLinkedInController };

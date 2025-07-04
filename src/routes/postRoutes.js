@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { postToTwitterController } = require('../controllers/postController');
+const { postToTwitterController, postToLinkedInController } = require('../controllers/postController');
 
-router.post('/post', postToTwitterController);
+router.post('/twitter', postToTwitterController);
+
+router.post('/linkedin', postToLinkedInController);
 
 module.exports = router;
