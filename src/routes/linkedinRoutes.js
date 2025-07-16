@@ -1,11 +1,15 @@
 const express = require('express');
 const router = express.Router();
+const User = require('../models/User');
 const {
   getAuthorizationUrl,
   exchangeCodeForAccessToken,
   postToLinkedIn,
-  getUserInfo  // Add this if you have it in your service
+  getUserInfo,  // Add this if you have it in your service
+  isTokenValid,
+  isTokenExpired
 } = require('../services/LinkedInService');
+const { protect } = require('../middleware/auth');
 
 // Simple token storage (use database in production)
 const tokenStore = new Map();
@@ -59,31 +63,50 @@ router.get('/callback', async (req, res) => {
   try {
     // Exchange code for access token
     console.log('🔄 Exchanging code for access token...');
-    const token = await exchangeCodeForAccessToken(code);
+    const tokenData = await exchangeCodeForAccessToken(code);
     console.log('✅ Access token received');
 
     // Get user info (if available)
     let userInfo = null;
     try {
       if (getUserInfo) {
-        userInfo = await getUserInfo(token);
+        userInfo = await getUserInfo(tokenData.accessToken);
         console.log('✅ User info retrieved:', userInfo);
       }
     } catch (userInfoError) {
       console.log('⚠️ Could not retrieve user info:', userInfoError.message);
     }
 
-    // Store token temporarily (use proper storage in production)
-    const userId = userInfo?.id || `user_${Date.now()}`;
-    tokenStore.set(userId, {
-      accessToken: token,
-      userInfo: userInfo,
-      createdAt: new Date()
-    });
+    // Find or create user and save LinkedIn token
+    let user = null;
+    if (userInfo && userInfo.email) {
+      // Try to find existing user by email
+      user = await User.findOne({ email: userInfo.email });
+      
+      if (!user) {
+        // Create new user if not found
+        user = await User.create({
+          email: userInfo.email,
+          linkedinToken: tokenData.accessToken,
+          linkedinTokenExpiry: tokenData.expiryDate,
+          linkedinPersonUrn: userInfo.fullUrn
+        });
+        console.log('✅ Created new user with LinkedIn token');
+      } else {
+        // Update existing user with LinkedIn token
+        user.linkedinToken = tokenData.accessToken;
+        user.linkedinTokenExpiry = tokenData.expiryDate;
+        user.linkedinPersonUrn = userInfo.fullUrn;
+        await user.save();
+        console.log('✅ Updated existing user with LinkedIn token');
+      }
+    } else {
+      console.log('⚠️ No email found in user info, cannot link to user account');
+    }
 
     // Test posting (optional)
     try {
-      await postToLinkedIn('✅ Successfully authenticated and posting via API!', token);
+      await postToLinkedIn('✅ Successfully authenticated and posting via API!', tokenData.accessToken);
       console.log('✅ Test post successful');
     } catch (postError) {
       console.log('⚠️ Test post failed:', postError.message);
@@ -93,9 +116,16 @@ router.get('/callback', async (req, res) => {
     res.json({
       success: true,
       message: 'LinkedIn authentication successful',
-      userId: userId,
+      userId: userInfo?.id || `user_${Date.now()}`,
       user: userInfo,
-      token: token.substring(0, 10) + '...' // Show partial token for security
+      token: tokenData.accessToken.substring(0, 10) + '...', // Show partial token for security
+      expiresAt: tokenData.expiryDate,
+      dbUser: user ? {
+        id: user._id,
+        email: user.email,
+        hasLinkedinToken: !!user.linkedinToken,
+        tokenExpiresAt: user.linkedinTokenExpiry
+      } : null
     });
 
   } catch (err) {
@@ -140,6 +170,59 @@ router.get('/tokens', (req, res) => {
     tokens,
     count: tokens.length
   });
+});
+
+// Check LinkedIn token status for authenticated user
+router.get('/token-status', protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    
+    if (!user || !user.linkedinToken) {
+      return res.json({
+        success: true,
+        hasToken: false,
+        needsReauth: true,
+        message: 'No LinkedIn token found',
+        reAuthUrl: `${process.env.BASE_URL || 'http://localhost:5001'}/auth/linkedin/login`
+      });
+    }
+
+    // Check expiry date
+    const expired = isTokenExpired(user.linkedinTokenExpiry);
+    if (expired) {
+      return res.json({
+        success: true,
+        hasToken: true,
+        expired: true,
+        needsReauth: true,
+        message: 'LinkedIn token has expired',
+        expiryDate: user.linkedinTokenExpiry,
+        reAuthUrl: `${process.env.BASE_URL || 'http://localhost:5001'}/auth/linkedin/login`
+      });
+    }
+
+    // Check validity with LinkedIn API
+    const valid = await isTokenValid(user.linkedinToken);
+    
+    res.json({
+      success: true,
+      hasToken: true,
+      expired: false,
+      valid: valid,
+      needsReauth: !valid,
+      expiryDate: user.linkedinTokenExpiry,
+      message: valid ? 'LinkedIn token is valid and ready to use' : 'LinkedIn token is invalid',
+      reAuthUrl: valid ? null : `${process.env.BASE_URL || 'http://localhost:5001'}/auth/linkedin/login`
+    });
+
+  } catch (error) {
+    console.error('Error checking token status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check token status',
+      error: error.message
+    });
+  }
 });
 
 // Test endpoint to check auth URL

@@ -40,7 +40,17 @@ const exchangeCodeForAccessToken = async (code) => {
             { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
         );
 
-        return response.data.access_token;
+        // LinkedIn tokens typically expire after 60 days (5184000 seconds)
+        const tokenData = response.data;
+        const expiresIn = tokenData.expires_in || 5184000; // default 60 days
+        const expiryDate = new Date(Date.now() + (expiresIn * 1000));
+
+        return {
+            accessToken: tokenData.access_token,
+            expiresIn: expiresIn,
+            expiryDate: expiryDate,
+            tokenType: tokenData.token_type || 'Bearer'
+        };
     } catch (error) {
         console.error('❌ Failed to exchange code for token:', error.response?.data || error.message);
         throw error;
@@ -199,11 +209,38 @@ const getAvailableScopes = () => {
     ];
 };
 
+// Check if LinkedIn token is still valid
+const isTokenValid = async (accessToken) => {
+    if (!accessToken) return false;
+    
+    try {
+        // Try a simple API call to check token validity
+        await getUserInfo(accessToken);
+        return true;
+    } catch (error) {
+        // If we get 401, token is invalid/expired
+        if (error.response?.status === 401) {
+            return false;
+        }
+        // For other errors, assume token might still be valid
+        console.warn('Token validation unclear:', error.message);
+        return false;
+    }
+};
+
+// Check if token is expired based on stored expiry date
+const isTokenExpired = (expiryDate) => {
+    if (!expiryDate) return true;
+    return new Date() >= new Date(expiryDate);
+};
+
 module.exports = {
     getAuthorizationUrl,
     exchangeCodeForAccessToken,
     postToLinkedIn,
     getUserInfo,
     testLinkedInConnection,
-    getAvailableScopes
+    getAvailableScopes,
+    isTokenValid,
+    isTokenExpired
 };

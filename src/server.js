@@ -5,6 +5,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const postRoutes = require('./routes/postRoutes');
 const linkedinRoutes = require('./routes/linkedinRoutes');
+const userRoutes = require('./routes/userRoutes');
 
 dotenv.config();
 connectDB();
@@ -27,6 +28,7 @@ app.use((req, res, next) => {
 
 // Routes
 app.use('/api/post', postRoutes);
+app.use('/api/user', userRoutes);
 app.use('/auth/linkedin', linkedinRoutes);
 
 // Health check endpoint
