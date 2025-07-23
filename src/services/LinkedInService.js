@@ -1,18 +1,18 @@
 const axios = require('axios');
-require('dotenv').config();
 
-const clientId = process.env.LINKEDIN_CLIENT_ID;
-const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
-const redirectUri = process.env.LINKEDIN_REDIRECT_URI || 'http://localhost:5001/auth/linkedin/callback';
+// Updated LinkedIn Service to use user-provided credentials instead of env variables
 
-// in LinkedInService.js
-const getAuthorizationUrl = () => {
+// Generate authorization URL with user's client ID
+const getAuthorizationUrl = (clientId, redirectUri = 'http://localhost:5001/auth/linkedin/callback') => {
+    if (!clientId) {
+        throw new Error('LinkedIn Client ID is required');
+    }
+
     const params = new URLSearchParams({
         response_type: 'code',
         client_id: clientId,
         redirect_uri: redirectUri,
-        // *** CHANGE 1: Updated scopes - removed deprecated r_liteprofile ***
-        scope: 'openid profile email w_member_social', // Use current LinkedIn scopes
+        scope: 'openid profile email w_member_social', // Current LinkedIn scopes
         state: 'random_string_here',
     });
 
@@ -21,8 +21,12 @@ const getAuthorizationUrl = () => {
     return url;
 };
 
-// 2. Exchange authorization code for access token
-const exchangeCodeForAccessToken = async (code) => {
+// Exchange authorization code for access token using user's credentials
+const exchangeCodeForAccessToken = async (code, clientId, clientSecret, redirectUri = 'http://localhost:5001/auth/linkedin/callback') => {
+    if (!clientId || !clientSecret) {
+        throw new Error('LinkedIn Client ID and Client Secret are required');
+    }
+
     const params = new URLSearchParams({
         grant_type: 'authorization_code',
         code,
@@ -32,7 +36,7 @@ const exchangeCodeForAccessToken = async (code) => {
     });
 
     try {
-        console.log({ clientId, clientSecret: !!clientSecret, redirectUri });
+        console.log('Exchanging code for token with user credentials...');
 
         const response = await axios.post(
             'https://www.linkedin.com/oauth/v2/accessToken',
@@ -113,30 +117,38 @@ const getUserInfoFallback = async (accessToken) => {
     }
 };
 
-// 3. Post a text update to LinkedIn
-const postToLinkedIn = async (text, accessToken) => {
+// Post a text update to LinkedIn using user's access token
+const postToLinkedIn = async (text, accessToken, profileId) => {
     if (!accessToken) {
         throw new Error('LinkedIn access token is missing');
     }
 
     try {
-        // *** CHANGE 3: Try primary method first, then fallback ***
-        let userInfo;
-        try {
-            userInfo = await getUserInfo(accessToken);
-        } catch (primaryError) {
-            console.log('Primary getUserInfo failed, trying fallback method...');
-            userInfo = await getUserInfoFallback(accessToken);
-        }
+        // If profileId is provided, use it directly; otherwise try to get user info
+        let authorUrn;
+        
+        if (profileId) {
+            authorUrn = profileId.startsWith('urn:li:person:') 
+                ? profileId 
+                : `urn:li:person:${profileId}`;
+        } else {
+            // Fallback: get user info if profileId not provided
+            let userInfo;
+            try {
+                userInfo = await getUserInfo(accessToken);
+            } catch (primaryError) {
+                console.log('Primary getUserInfo failed, trying fallback method...');
+                userInfo = await getUserInfoFallback(accessToken);
+            }
 
-        if (!userInfo || !userInfo.id) {
-            throw new Error('Could not retrieve authenticated user information for posting.');
-        }
+            if (!userInfo || !userInfo.id) {
+                throw new Error('Could not retrieve authenticated user information for posting. Please provide Profile ID in settings.');
+            }
 
-        // Format the author URN properly
-        const authorUrn = userInfo.fullUrn.startsWith('urn:li:person:') 
-            ? userInfo.fullUrn 
-            : `urn:li:person:${userInfo.id}`;
+            authorUrn = userInfo.fullUrn.startsWith('urn:li:person:') 
+                ? userInfo.fullUrn 
+                : `urn:li:person:${userInfo.id}`;
+        }
             
         console.log('Attempting to post with author URN:', authorUrn);
 

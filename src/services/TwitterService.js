@@ -1,34 +1,22 @@
 const { TwitterApi } = require('twitter-api-v2');
-require('dotenv').config();
 
-const {
-  TWITTER_API_KEY,
-  TWITTER_API_SECRET,
-  TWITTER_ACCESS_TOKEN,
-  TWITTER_ACCESS_SECRET,
-} = process.env;
-
-// Validate credentials
-if (!TWITTER_API_KEY || !TWITTER_API_SECRET || !TWITTER_ACCESS_TOKEN || !TWITTER_ACCESS_SECRET) {
-  throw new Error('Missing Twitter API credentials in .env file');
-}
-
-const client = new TwitterApi({
-  appKey: TWITTER_API_KEY,
-  appSecret: TWITTER_API_SECRET,
-  accessToken: TWITTER_ACCESS_TOKEN,
-  accessSecret: TWITTER_ACCESS_SECRET,
-});
-
-const postToTwitter = async (text) => {
+const postToTwitter = async (text, credentials) => {
   try {
-    console.log('Posting tweet with text:', text);
-    console.log('Credentials:', {
-      appKey: TWITTER_API_KEY,
-      appSecret: '[REDACTED]',
-      accessToken: TWITTER_ACCESS_TOKEN,
-      accessSecret: '[REDACTED]',
+    // Validate credentials
+    if (!credentials.apiKey || !credentials.apiSecret || !credentials.accessToken || !credentials.accessSecret) {
+      throw new Error('Missing Twitter API credentials');
+    }
+
+    const client = new TwitterApi({
+      appKey: credentials.apiKey,
+      appSecret: credentials.apiSecret,
+      accessToken: credentials.accessToken,
+      accessSecret: credentials.accessSecret,
     });
+
+    console.log('Posting tweet with text:', text);
+    console.log('Using user-provided credentials');
+    
     const response = await client.v2.tweet(text);
     console.log('Tweet posted:', response.data);
     return response.data;

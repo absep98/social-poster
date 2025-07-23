@@ -4,8 +4,10 @@ const connectDB = require('./config/db');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const postRoutes = require('./routes/postRoutes');
+const crudRoutes = require('./routes/crudRoutes');
 const linkedinRoutes = require('./routes/linkedinRoutes');
 const userRoutes = require('./routes/userRoutes');
+const credentialsRoutes = require('./routes/credentialsRoutes');
 
 dotenv.config();
 connectDB();
@@ -27,8 +29,10 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.use('/api/post', postRoutes);
+app.use('/api/post', postRoutes);       // Publishing routes: /api/post/twitter, /api/post/linkedin
+app.use('/api/posts', crudRoutes);      // CRUD routes: /api/posts (GET, POST, PUT, DELETE)
 app.use('/api/user', userRoutes);
+app.use('/api/credentials', credentialsRoutes); // Platform credentials management
 app.use('/auth/linkedin', linkedinRoutes);
 
 // Health check endpoint
